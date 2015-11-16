@@ -21,7 +21,7 @@
 
 #include "ServerThread.h"
 
-#include <thrift/concurrency/PosixThreadFactory.h>
+#include <thrift/concurrency/PlatformThreadFactory.h>
 #include <thrift/concurrency/ThreadManager.h>
 #include <thrift/server/TThreadPoolServer.h>
 #include <thrift/transport/TBufferTransports.h>
@@ -36,7 +36,7 @@ void ServerThread::start() {
   running_ = true;
 
   // Start the other thread
-  concurrency::PosixThreadFactory threadFactory;
+  concurrency::PlatformThreadFactory threadFactory;
   threadFactory.setDetached(false);
   thread_ = threadFactory.newThread(helper_);
 
@@ -90,7 +90,7 @@ void ServerThread::run() {
     try {
       // Try to serve requests
       server_->serve();
-    } catch (const TException& x) {
+    } catch (const TException&) {
       // TNonblockingServer throws a generic TException if it fails to bind.
       // If we get a TException, we'll optimistically assume the bind failed.
       ++port_;

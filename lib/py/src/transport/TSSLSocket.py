@@ -45,7 +45,8 @@ class TSSLSocket(TSocket.TSocket):
                ca_certs=None,
                keyfile=None,
                certfile=None,
-               unix_socket=None):
+               unix_socket=None,
+               ciphers=None):
     """Create SSL TSocket
 
     @param validate: Set to False to disable SSL certificate validation
@@ -58,6 +59,9 @@ class TSSLSocket(TSocket.TSocket):
     @type keyfile: str
     @param certfile: The cert file
     @type certfile: str
+    @param ciphers: The cipher suites to allow. This is passed to
+                    the ssl_wrap function as the 'ciphers' parameter.
+    @type ciphers: str
     
     Raises an IOError exception if validate is True and the ca_certs file is
     None, not present or unreadable.
@@ -72,6 +76,7 @@ class TSSLSocket(TSocket.TSocket):
     self.ca_certs = ca_certs
     self.keyfile = keyfile
     self.certfile = certfile
+    self.ciphers = ciphers
     if validate:
       if ca_certs is None or not os.access(ca_certs, os.R_OK):
         raise IOError('Certificate Authority ca_certs file "%s" '
@@ -92,17 +97,18 @@ class TSSLSocket(TSocket.TSocket):
                                       ca_certs=self.ca_certs,
                                       keyfile=self.keyfile,
                                       certfile=self.certfile,
-                                      cert_reqs=self.cert_reqs)
+                                      cert_reqs=self.cert_reqs,
+                                      ciphers=self.ciphers)
         self.handle.settimeout(self._timeout)
         try:
           self.handle.connect(ip_port)
-        except socket.error, e:
+        except socket.error as e:
           if res is not res0[-1]:
             continue
           else:
             raise e
         break
-    except socket.error, e:
+    except socket.error as e:
       if self._unix_socket:
         message = 'Could not connect to secure socket %s: %s' \
                 % (self._unix_socket, e)
@@ -167,7 +173,8 @@ class TSSLServerSocket(TSocket.TServerSocket):
                host=None,
                port=9090,
                certfile='cert.pem',
-               unix_socket=None):
+               unix_socket=None,
+               ciphers=None):
     """Initialize a TSSLServerSocket
 
     @param certfile: filename of the server certificate, defaults to cert.pem
@@ -178,9 +185,14 @@ class TSSLServerSocket(TSocket.TServerSocket):
     @type host: str
     @param port: The port to listen on for inbound connections.
     @type port: int
+    @param ciphers: The cipher suites to allow. This is passed to
+                    the ssl_wrap function as the 'ciphers' parameter.
+    @type ciphers: str
+
     """
     self.setCertfile(certfile)
     TSocket.TServerSocket.__init__(self, host, port)
+    self.ciphers = ciphers
 
   def setCertfile(self, certfile):
     """Set or change the server certificate file used to wrap new connections.
@@ -199,8 +211,9 @@ class TSSLServerSocket(TSocket.TServerSocket):
     plain_client, addr = self.handle.accept()
     try:
       client = ssl.wrap_socket(plain_client, certfile=self.certfile,
-                      server_side=True, ssl_version=self.SSL_VERSION)
-    except ssl.SSLError, ssl_exc:
+                      server_side=True, ssl_version=self.SSL_VERSION,
+                      ciphers=self.ciphers)
+    except ssl.SSLError as ssl_exc:
       # failed handshake/ssl wrap, close socket to client
       plain_client.close()
       # raise ssl_exc

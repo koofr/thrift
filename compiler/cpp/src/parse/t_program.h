@@ -100,6 +100,7 @@ public:
   const std::vector<t_struct*>& get_xceptions() const { return xceptions_; }
   const std::vector<t_struct*>& get_objects() const { return objects_; }
   const std::vector<t_service*>& get_services() const { return services_; }
+  const std::map<std::string, std::string>& get_namespaces() const { return namespaces_; }
 
   // Program elements
   void add_typedef(t_typedef* td) { typedefs_.push_back(td); }
@@ -135,11 +136,11 @@ public:
    * @return     true if a certain collision was found, otherwise false
    */
   bool is_unique_typename(t_type* t) {
-    int occurances = program_typename_count(this, t);
+    int occurrences = program_typename_count(this, t);
     for (std::vector<t_program*>::iterator it = includes_.begin(); it != includes_.end(); ++it) {
-      occurances += program_typename_count(*it, t);
+      occurrences += program_typename_count(*it, t);
     }
-    return 0 == occurances;
+    return 0 == occurrences;
   }
 
   /**
@@ -149,12 +150,12 @@ public:
    * @return     the number of certain typename collisions
    */
   int program_typename_count(t_program* prog, t_type* t) {
-    int occurances = 0;
-    occurances += collection_typename_count(prog, prog->typedefs_, t);
-    occurances += collection_typename_count(prog, prog->enums_, t);
-    occurances += collection_typename_count(prog, prog->objects_, t);
-    occurances += collection_typename_count(prog, prog->services_, t);
-    return occurances;
+    int occurrences = 0;
+    occurrences += collection_typename_count(prog, prog->typedefs_, t);
+    occurrences += collection_typename_count(prog, prog->enums_, t);
+    occurrences += collection_typename_count(prog, prog->objects_, t);
+    occurrences += collection_typename_count(prog, prog->services_, t);
+    return occurrences;
   }
 
   /**
@@ -166,11 +167,11 @@ public:
    */
   template <class T>
   int collection_typename_count(t_program* prog, T type_collection, t_type* t) {
-    int occurances = 0;
+    int occurrences = 0;
     for (typename T::iterator it = type_collection.begin(); it != type_collection.end(); ++it)
       if (t != *it && 0 == t->get_name().compare((*it)->get_name()) && is_common_namespace(prog, t))
-        ++occurances;
-    return occurances;
+        ++occurrences;
+    return occurrences;
   }
 
   /**
@@ -270,7 +271,7 @@ public:
     include_prefix_ = include_prefix;
 
     // this is intended to be a directory; add a trailing slash if necessary
-    int len = include_prefix_.size();
+    std::string::size_type len = include_prefix_.size();
     if (len > 0 && include_prefix_[len - 1] != '/') {
       include_prefix_ += '/';
     }
@@ -320,6 +321,9 @@ public:
     return std::string();
   }
 
+  const std::map<std::string, std::string>& get_all_namespaces(){
+     return namespaces_;
+  }
   // Language specific namespace / packaging
 
   void add_cpp_include(std::string path) { cpp_includes_.push_back(path); }

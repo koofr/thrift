@@ -510,13 +510,13 @@ void t_delphi_generator::generate_delphi_doc(ostream& out, t_function* tfunction
 }
 
 bool t_delphi_generator::find_keyword(std::map<std::string, int>& keyword_map, std::string name) {
-  int len = name.length();
+  std::string::size_type len = name.length();
 
   if (len <= 0) {
     return false;
   }
 
-  int nlast = name.find_last_of('_');
+  std::string::size_type nlast = name.find_last_of('_');
 
   if (nlast >= 1) {
     if (nlast == (len - 1)) {
@@ -623,7 +623,13 @@ void t_delphi_generator::create_keywords() {
   delphi_keywords["automated"] = 1;
   delphi_keywords["at"] = 1;
   delphi_keywords["on"] = 1;
+
+  // reserved/predefined variables and types (lowercase!)
   delphi_keywords["result"] = 1;
+  delphi_keywords["tbytes"] = 1;
+  delphi_keywords["tobject"] = 1;
+  delphi_keywords["tclass"] = 1;
+  delphi_keywords["tinterfacedobject"] = 1;
 
   delphi_reserved_method["create"] = 1;
   delphi_reserved_method["free"] = 1;
@@ -2351,6 +2357,7 @@ void t_delphi_generator::generate_process_function(t_service* tservice, t_functi
   if (!tfunction->is_oneway()) {
     indent_impl(s_service_impl) << "msg: Thrift.Protocol.IMessage;" << endl;
     indent_impl(s_service_impl) << "ret: " << result_intfnm << ";" << endl;
+    indent_impl(s_service_impl) << "appx : TApplicationException;" << endl;
   }
 
   indent_down_impl();
@@ -2375,10 +2382,8 @@ void t_delphi_generator::generate_process_function(t_service* tservice, t_functi
     indent_impl(s_service_impl) << "ret := " << result_clsnm << "Impl.Create;" << endl;
   }
 
-  if (events_ || (!tfunction->is_oneway() && xceptions.size() > 0)) {
-    indent_impl(s_service_impl) << "try" << endl;
-    indent_up_impl();
-  }
+  indent_impl(s_service_impl) << "try" << endl;
+  indent_up_impl();
 
   t_struct* arg_struct = tfunction->get_arglist();
   const std::vector<t_field*>& fields = arg_struct->get_members();
@@ -2405,36 +2410,61 @@ void t_delphi_generator::generate_process_function(t_service* tservice, t_functi
                                 << " := " << empty_value((*f_iter)->get_type()) << ";" << endl;
   }
 
-  if (events_ || (!tfunction->is_oneway() && xceptions.size() > 0)) {
-    indent_down_impl();
-    indent_impl(s_service_impl) << "except" << endl;
+  indent_down_impl();
+  indent_impl(s_service_impl) << "except" << endl;
+  indent_up_impl();
+
+  for (x_iter = xceptions.begin(); x_iter != xceptions.end(); ++x_iter) {
+    indent_impl(s_service_impl) << "on E: " << type_name((*x_iter)->get_type(), true, true)
+                                << " do begin" << endl;
     indent_up_impl();
-    for (x_iter = xceptions.begin(); x_iter != xceptions.end(); ++x_iter) {
-      indent_impl(s_service_impl) << "on E: " << type_name((*x_iter)->get_type(), true, true)
-                                  << " do" << endl;
-      indent_impl(s_service_impl) << "begin" << endl;
-      indent_up_impl();
-      if (!tfunction->is_oneway()) {
-        string factory_name = normalize_clsnm((*x_iter)->get_type()->get_name(), "", true)
-                              + "Factory";
-        indent_impl(s_service_impl) << "ret." << prop_name(*x_iter) << " := E." << factory_name
-                                    << ";" << endl;
-      }
-      indent_down_impl();
-      indent_impl(s_service_impl) << "end;" << endl;
-    }
-    if (events_) {
-      indent_impl(s_service_impl) << "on E: Exception do" << endl;
-      indent_impl(s_service_impl) << "begin" << endl;
-      indent_up_impl();
-      indent_impl(s_service_impl) << "if events <> nil then events.UnhandledError(E);" << endl;
-      indent_impl(s_service_impl) << "raise; // let it bubble up" << endl;
-      indent_down_impl();
-      indent_impl(s_service_impl) << "end;" << endl;
+    if (!tfunction->is_oneway()) {
+      string factory_name = normalize_clsnm((*x_iter)->get_type()->get_name(), "", true)
+                            + "Factory";
+      indent_impl(s_service_impl) << "ret." << prop_name(*x_iter) << " := E." << factory_name << ";"
+                                  << endl;
     }
     indent_down_impl();
     indent_impl(s_service_impl) << "end;" << endl;
   }
+
+  indent_impl(s_service_impl) << "on E: Exception do begin" << endl;
+  indent_up_impl();
+  if(events_) {
+    indent_impl(s_service_impl) << "if events <> nil then events.UnhandledError(E);" << endl;
+  }
+  if (!tfunction->is_oneway()) {
+    indent_impl(s_service_impl) << "appx := TApplicationException.Create( "
+                                   "TApplicationException.TExceptionType.InternalError, E.Message);"
+                                << endl;
+    indent_impl(s_service_impl) << "try" << endl;
+    indent_up_impl();
+    if(events_) {
+      indent_impl(s_service_impl) << "if events <> nil then events.PreWrite;" << endl;
+    }
+    indent_impl(s_service_impl) << "msg := Thrift.Protocol.TMessageImpl.Create('"
+                                << tfunction->get_name() << "', TMessageType.Exception, seqid);"
+                                << endl;
+    indent_impl(s_service_impl) << "oprot.WriteMessageBegin( msg);" << endl;
+    indent_impl(s_service_impl) << "appx.Write(oprot);" << endl;
+    indent_impl(s_service_impl) << "oprot.WriteMessageEnd();" << endl;
+    indent_impl(s_service_impl) << "oprot.Transport.Flush();" << endl;
+    if(events_) {
+      indent_impl(s_service_impl) << "if events <> nil then events.PostWrite;" << endl;
+    }
+    indent_impl(s_service_impl) << "Exit;" << endl;
+    indent_down_impl();
+    indent_impl(s_service_impl) << "finally" << endl;
+    indent_up_impl();
+    indent_impl(s_service_impl) << "appx.Free;" << endl;
+    indent_down_impl();
+    indent_impl(s_service_impl) << "end;" << endl;
+  }
+  indent_down_impl();
+  indent_impl(s_service_impl) << "end;" << endl;
+
+  indent_down_impl();
+  indent_impl(s_service_impl) << "end;" << endl;
 
   if (!tfunction->is_oneway()) {
     if (events_) {
@@ -3451,6 +3481,9 @@ void t_delphi_generator::generate_delphi_struct_reader_impl(ostream& out,
   indent_impl(code_block) << "begin" << endl;
   indent_up_impl();
 
+  indent_impl(local_vars) << "tracker : IProtocolRecursionTracker;" << endl;
+  indent_impl(code_block) << "tracker := iprot.NextRecursionLevel;" << endl;
+
   // local bools for required fields
   for (f_iter = fields.begin(); f_iter != fields.end(); ++f_iter) {
     if ((*f_iter)->get_req() == t_field::T_REQUIRED) {
@@ -3590,8 +3623,10 @@ void t_delphi_generator::generate_delphi_struct_result_writer_impl(ostream& out,
   indent_impl(code_block) << "begin" << endl;
   indent_up_impl();
 
+  indent_impl(local_vars) << "tracker : IProtocolRecursionTracker;" << endl;
+  indent_impl(code_block) << "tracker := oprot.NextRecursionLevel;" << endl;
+  
   indent_impl(code_block) << "struc := TStructImpl.Create('" << name << "');" << endl;
-
   indent_impl(code_block) << "oprot.WriteStructBegin(struc);" << endl;
 
   if (fields.size() > 0) {
@@ -3652,8 +3687,10 @@ void t_delphi_generator::generate_delphi_struct_writer_impl(ostream& out,
   indent_impl(code_block) << "begin" << endl;
   indent_up_impl();
 
-  indent_impl(code_block) << "struc := TStructImpl.Create('" << name << "');" << endl;
+  indent_impl(local_vars) << "tracker : IProtocolRecursionTracker;" << endl;
+  indent_impl(code_block) << "tracker := oprot.NextRecursionLevel;" << endl;
 
+  indent_impl(code_block) << "struc := TStructImpl.Create('" << name << "');" << endl;
   indent_impl(code_block) << "oprot.WriteStructBegin(struc);" << endl;
 
   if (fields.size() > 0) {

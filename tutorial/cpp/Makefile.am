@@ -18,6 +18,9 @@
 #
 AUTOMAKE_OPTIONS = subdir-objects serial-tests
 
+BUILT_SOURCES = gen-cpp/shared_types.cpp \
+                gen-cpp/tutorial_types.cpp
+
 noinst_LTLIBRARIES = libtutorialgencpp.la
 nodist_libtutorialgencpp_la_SOURCES = \
 	gen-cpp/Calculator.cpp \
@@ -80,5 +83,6 @@ style-local:
 	$(CPPSTYLE_CMD)
 
 EXTRA_DIST = \
+	CMakeLists.txt \
 	CppClient.cpp \
 	CppServer.cpp

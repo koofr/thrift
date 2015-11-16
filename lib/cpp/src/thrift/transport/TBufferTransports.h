@@ -20,6 +20,7 @@
 #ifndef _THRIFT_TRANSPORT_TBUFFERTRANSPORTS_H_
 #define _THRIFT_TRANSPORT_TBUFFERTRANSPORTS_H_ 1
 
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <boost/scoped_array.hpp>
@@ -86,7 +87,7 @@ public:
   /**
    * Fast-path write.
    *
-   * When we have enough empty space in our buffer to accomodate the write, we
+   * When we have enough empty space in our buffer to accommodate the write, we
    * can satisfy it with a single memcpy, then adjust our internal pointers.
    * If the buffer is full, we call out to our slow path, implemented by a
    * subclass.  This method is meant to eventually be nonvirtual and
@@ -305,6 +306,7 @@ public:
 class TFramedTransport : public TVirtualTransport<TFramedTransport, TBufferBase> {
 public:
   static const int DEFAULT_BUFFER_SIZE = 512;
+  static const int DEFAULT_MAX_FRAME_SIZE = 256 * 1024 * 1024;
 
   /// Use default buffer sizes.
   TFramedTransport(boost::shared_ptr<TTransport> transport)
@@ -313,7 +315,8 @@ public:
       wBufSize_(DEFAULT_BUFFER_SIZE),
       rBuf_(),
       wBuf_(new uint8_t[wBufSize_]),
-      bufReclaimThresh_((std::numeric_limits<uint32_t>::max)()) {
+      bufReclaimThresh_((std::numeric_limits<uint32_t>::max)()),
+      maxFrameSize_(DEFAULT_MAX_FRAME_SIZE) {
     initPointers();
   }
 
@@ -325,7 +328,8 @@ public:
       wBufSize_(sz),
       rBuf_(),
       wBuf_(new uint8_t[wBufSize_]),
-      bufReclaimThresh_(bufReclaimThresh) {
+      bufReclaimThresh_(bufReclaimThresh),
+      maxFrameSize_(DEFAULT_MAX_FRAME_SIZE) {
     initPointers();
   }
 
@@ -365,6 +369,16 @@ public:
    */
   virtual const std::string getOrigin() { return transport_->getOrigin(); }
 
+  /**
+   * Set the maximum size of the frame at read
+   */
+  void setMaxFrameSize(uint32_t maxFrameSize) { maxFrameSize_ = maxFrameSize; }
+
+  /**
+   * Get the maximum size of the frame at read
+   */
+  uint32_t getMaxFrameSize() { return maxFrameSize_; }
+
 protected:
   /**
    * Reads a frame of input from the underlying stream.
@@ -390,6 +404,7 @@ protected:
   boost::scoped_array<uint8_t> rBuf_;
   boost::scoped_array<uint8_t> wBuf_;
   uint32_t bufReclaimThresh_;
+  uint32_t maxFrameSize_;
 };
 
 /**
@@ -629,7 +644,7 @@ public:
   uint32_t available_write() const { return static_cast<uint32_t>(wBound_ - wBase_); }
 
   // Returns a pointer to where the client can write data to append to
-  // the TMemoryBuffer, and ensures the buffer is big enough to accomodate a
+  // the TMemoryBuffer, and ensures the buffer is big enough to accommodate a
   // write of the provided length.  The returned pointer is very convenient for
   // passing to read(), recv(), or similar. You must call wroteBytes() as soon
   // as data is written or the buffer will not be aware that data has changed.

@@ -25,7 +25,7 @@
 
 #include <boost/test/unit_test.hpp>
 
-#include <thrift/concurrency/PosixThreadFactory.h>
+#include <thrift/concurrency/PlatformThreadFactory.h>
 #include <thrift/concurrency/Monitor.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/server/TThreadedServer.h>
@@ -94,7 +94,7 @@ public:
       const boost::shared_ptr<TProtocolFactory>& protocolFactory) {
     boost::shared_ptr<TServerSocket> socket(new TServerSocket(port));
 
-    boost::shared_ptr<PosixThreadFactory> threadFactory(new PosixThreadFactory);
+    boost::shared_ptr<PlatformThreadFactory> threadFactory(new PlatformThreadFactory);
     boost::shared_ptr<ThreadManager> threadManager = ThreadManager::newSimpleThreadManager(8);
     threadManager->threadFactory(threadFactory);
     threadManager->start();
@@ -122,7 +122,7 @@ public:
       throw TException("TNonblockingServer must use TFramedTransport");
     }
 
-    boost::shared_ptr<PosixThreadFactory> threadFactory(new PosixThreadFactory);
+    boost::shared_ptr<PlatformThreadFactory> threadFactory(new PlatformThreadFactory);
     boost::shared_ptr<ThreadManager> threadManager = ThreadManager::newSimpleThreadManager(8);
     threadManager->threadFactory(threadFactory);
     threadManager->start();
@@ -522,7 +522,7 @@ void testEventSequencing() {
   // can test the timing for the preRead() call.
   string requestName = "getDataWait";
   string eventName = "ParentService.getDataWait";
-  int32_t seqid = time(NULL);
+  int32_t seqid = int32_t(time(NULL));
   TBinaryProtocol protocol(socket);
   protocol.writeMessageBegin(requestName, T_CALL, seqid);
   socket->flush();
@@ -765,6 +765,9 @@ void testExpectedError() {
     BOOST_FAIL("expected MyError to be thrown");
   } catch (const MyError& e) {
     BOOST_CHECK_EQUAL(message, e.message);
+    // Check if std::exception::what() is handled properly
+    size_t message_pos = std::string(e.what()).find("TException - service has thrown: MyError");
+    BOOST_CHECK_NE(message_pos, std::string::npos);
   }
 
   // Now we should see the events for a normal call finish
@@ -816,7 +819,7 @@ void testUnexpectedError() {
   try {
     client->recv_unexpectedExceptionWait();
     BOOST_FAIL("expected TApplicationError to be thrown");
-  } catch (const TApplicationException& e) {
+  } catch (const TApplicationException&) {
   }
 
   // Now we should see a handler error event

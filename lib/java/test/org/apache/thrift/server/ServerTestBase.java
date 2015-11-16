@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import java.nio.ByteBuffer;
+
 import junit.framework.TestCase;
 
 import org.apache.thrift.TException;
@@ -63,6 +65,11 @@ public abstract class ServerTestBase extends TestCase {
       System.out.print("testString(\"" + thing + "\")\n");
       return thing;
     }
+
+    public boolean testBool(boolean thing) {
+      System.out.print("testBool(" + thing + ")\n");
+      return thing;
+    }
   
     public byte testByte(byte thing) {
       System.out.print("testByte(" + thing + ")\n");
@@ -83,7 +90,13 @@ public abstract class ServerTestBase extends TestCase {
       System.out.print("testDouble(" + thing + ")\n");
       return thing;
     }
-  
+
+    public ByteBuffer testBinary(ByteBuffer thing) {
+      String hexstr = "TODO: toHexString(thing)";
+	  System.out.print("testBinary(" + hexstr + ")\n");
+      return thing;
+    }
+
     public Xtruct testStruct(Xtruct thing) {
       System.out.print("testStruct({" +
                        "\"" + thing.string_thing + "\", " +
@@ -297,6 +310,13 @@ public abstract class ServerTestBase extends TestCase {
 
   public abstract TTransport getClientTransport(TTransport underlyingTransport) throws Exception;
 
+  private void testBool(ThriftTest.Client testClient) throws TException {
+    boolean t = testClient.testBool(true);
+    assertEquals(true, t);
+    boolean f = testClient.testBool(false);
+    assertEquals(false, f);
+  }
+
   private void testByte(ThriftTest.Client testClient) throws TException {
     byte i8 = testClient.testByte((byte)1);
     assertEquals(1, i8);
@@ -396,6 +416,7 @@ public abstract class ServerTestBase extends TestCase {
       open(transport);
       testVoid(testClient);
       testString(testClient);
+      testBool(testClient);
       testByte(testClient);
       testI32(testClient);
       testI64(testClient);
@@ -577,6 +598,11 @@ public abstract class ServerTestBase extends TestCase {
         }
 
         @Override
+        public void testBool(boolean thing, AsyncMethodCallback resultHandler) throws TException {
+            resultHandler.onComplete(handler.testBool(thing));
+        }
+
+        @Override
         public void testByte(byte thing, AsyncMethodCallback resultHandler) throws TException {
             resultHandler.onComplete(handler.testByte(thing));
         }
@@ -594,6 +620,11 @@ public abstract class ServerTestBase extends TestCase {
         @Override
         public void testDouble(double thing, AsyncMethodCallback resultHandler) throws TException {
             resultHandler.onComplete(handler.testDouble(thing));
+        }
+
+        @Override 
+        public void testBinary(ByteBuffer thing, AsyncMethodCallback resultHandler) throws TException {
+            resultHandler.onComplete(handler.testBinary(thing));
         }
 
         @Override

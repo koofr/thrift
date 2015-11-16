@@ -228,7 +228,7 @@ public:
     return (nsglobal_.size() ? NSGLOBAL_B : NSGLOBAL) + ns;
   }
 
-  // add a directory to allready existing namespace
+  // add a directory to already existing namespace
   string php_namespace_directory(string directory, bool end = true) {
     (void)directory;
     if (end) {
@@ -397,7 +397,9 @@ void t_php_generator::init_generator() {
 
   // Print header
   f_types_ << "<?php" << endl;
-  f_types_ << "namespace " << php_namespace_suffix(get_program()) << ";" << endl << endl;
+  if ( ! php_namespace_suffix(get_program()).empty() )  {
+    f_types_ << "namespace " << php_namespace_suffix(get_program()) << ";" << endl << endl;
+  }
   f_types_ << autogen_comment() << php_includes();
 
   f_types_ << endl;
@@ -1081,13 +1083,22 @@ void t_php_generator::generate_php_struct_json_serialize(ofstream& out,
       t_field* field = (*f_iter);
       t_type* type = field->get_type();
       const string& name = field->get_name();
-      if (type->is_map() && !((t_map*)type)->get_key_type()->is_string()) {
-        // JSON object keys must be strings
-        continue;
+      if (type->is_map()) {
+        t_type* key_type = ((t_map*)type)->get_key_type();
+        if (!(key_type->is_base_type() || key_type->is_enum())) {
+          // JSON object keys must be strings. PHP's json_encode()
+          // function will convert any scalar key to strings, but
+          // we skip thrift maps with non-scalar keys.
+          continue;
+        }
       }
       indent(out) << "if ($this->" << name << " !== null) {" << endl;
       indent_up();
-      indent(out) << "$json->" << name << " = $this->" << name << ";" << endl;
+      indent(out) << "$json->" << name << " = ";
+      if (type->is_map()) {
+        out << "(object)";
+      }
+      out << "$this->" << name << ";" << endl;
       indent_down();
       indent(out) << "}" << endl;
     }
@@ -1134,7 +1145,9 @@ void t_php_generator::generate_service(t_service* tservice) {
   f_service_.open(f_service_name.c_str());
 
   f_service_ << "<?php" << endl;
-  f_service_ << "namespace " << php_namespace_suffix(tservice->get_program()) << ";" << endl;
+  if ( ! php_namespace_suffix(tservice->get_program()).empty() ) {
+    f_service_ << "namespace " << php_namespace_suffix(tservice->get_program()) << ";" << endl;
+  }
   f_service_ << autogen_comment() << php_includes();
 
   f_service_ << endl;

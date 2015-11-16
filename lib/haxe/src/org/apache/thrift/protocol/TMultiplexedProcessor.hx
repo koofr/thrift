@@ -51,6 +51,9 @@ class TMultiplexedProcessor implements TProcessor
     private var serviceProcessorMap : StringMap<TProcessor> = new StringMap<TProcessor>();
     private var defaultProcessor : TProcessor = null;
 
+    public function new() {
+    }
+
     /**
      * 'Register' a service with this TMultiplexedProcessor. This allows us to broker
      * requests to individual services by using the service name to select them at request time.
@@ -58,7 +61,7 @@ class TMultiplexedProcessor implements TProcessor
      * Args:
      * - serviceName    Name of a service, has to be identical to the name
      *                  declared in the Thrift IDL, e.g. "WeatherReport".
-     * - processor      Implementation of a service, ususally referred to as "handlers",
+     * - processor      Implementation of a service, usually referred to as "handlers",
      *                  e.g. WeatherReportHandler implementing WeatherReport.Iface.
      */
     public function RegisterProcessor(serviceName : String, processor : TProcessor, asDefault : Bool = false) : Void {

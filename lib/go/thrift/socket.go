@@ -100,7 +100,7 @@ func (p *TSocket) Open() error {
 	return nil
 }
 
-// Retreive the underlying net.Conn
+// Retrieve the underlying net.Conn
 func (p *TSocket) Conn() net.Conn {
 	return p.conn
 }
@@ -148,10 +148,6 @@ func (p *TSocket) Write(buf []byte) (int, error) {
 	return p.conn.Write(buf)
 }
 
-func (p *TSocket) Peek() bool {
-	return p.IsOpen()
-}
-
 func (p *TSocket) Flush() error {
 	return nil
 }
@@ -162,3 +158,9 @@ func (p *TSocket) Interrupt() error {
 	}
 	return p.conn.Close()
 }
+
+func (p *TSocket) RemainingBytes() (num_bytes uint64) {
+	const maxSize = ^uint64(0)
+	return maxSize  // the thruth is, we just don't know unless framed is used
+}
+

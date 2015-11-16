@@ -38,6 +38,8 @@
 #include <unistd.h>
 #endif
 #include <event.h>
+#include <event2/event_compat.h>
+#include <event2/event_struct.h>
 
 namespace apache {
 namespace thrift {
@@ -155,8 +157,11 @@ private:
   /// Server socket file descriptor
   THRIFT_SOCKET serverSocket_;
 
-  /// Port server runs on
+  /// Port server runs on. Zero when letting OS decide actual port
   int port_;
+
+  /// Port server actually runs on
+  int listenPort_;
 
   /// The optional user-provided event-base (for single-thread servers)
   event_base* userEventBase_;
@@ -280,6 +285,7 @@ private:
     nextIOThread_ = 0;
     useHighPriorityIOThreads_ = false;
     port_ = port;
+    listenPort_ = port;
     userEventBase_ = NULL;
     threadPoolProcessing_ = false;
     numTConnections_ = 0;
@@ -301,29 +307,21 @@ private:
   }
 
 public:
-  template <typename ProcessorFactory>
-  TNonblockingServer(const boost::shared_ptr<ProcessorFactory>& processorFactory,
-                     int port,
-                     THRIFT_OVERLOAD_IF(ProcessorFactory, TProcessorFactory))
+  TNonblockingServer(const boost::shared_ptr<TProcessorFactory>& processorFactory, int port)
     : TServer(processorFactory) {
     init(port);
   }
 
-  template <typename Processor>
-  TNonblockingServer(const boost::shared_ptr<Processor>& processor,
-                     int port,
-                     THRIFT_OVERLOAD_IF(Processor, TProcessor))
+  TNonblockingServer(const boost::shared_ptr<TProcessor>& processor, int port)
     : TServer(processor) {
     init(port);
   }
 
-  template <typename ProcessorFactory>
-  TNonblockingServer(const boost::shared_ptr<ProcessorFactory>& processorFactory,
+  TNonblockingServer(const boost::shared_ptr<TProcessorFactory>& processorFactory,
                      const boost::shared_ptr<TProtocolFactory>& protocolFactory,
                      int port,
                      const boost::shared_ptr<ThreadManager>& threadManager
-                     = boost::shared_ptr<ThreadManager>(),
-                     THRIFT_OVERLOAD_IF(ProcessorFactory, TProcessorFactory))
+                     = boost::shared_ptr<ThreadManager>())
     : TServer(processorFactory) {
 
     init(port);
@@ -333,13 +331,11 @@ public:
     setThreadManager(threadManager);
   }
 
-  template <typename Processor>
-  TNonblockingServer(const boost::shared_ptr<Processor>& processor,
+  TNonblockingServer(const boost::shared_ptr<TProcessor>& processor,
                      const boost::shared_ptr<TProtocolFactory>& protocolFactory,
                      int port,
                      const boost::shared_ptr<ThreadManager>& threadManager
-                     = boost::shared_ptr<ThreadManager>(),
-                     THRIFT_OVERLOAD_IF(Processor, TProcessor))
+                     = boost::shared_ptr<ThreadManager>())
     : TServer(processor) {
 
     init(port);
@@ -349,16 +345,14 @@ public:
     setThreadManager(threadManager);
   }
 
-  template <typename ProcessorFactory>
-  TNonblockingServer(const boost::shared_ptr<ProcessorFactory>& processorFactory,
+  TNonblockingServer(const boost::shared_ptr<TProcessorFactory>& processorFactory,
                      const boost::shared_ptr<TTransportFactory>& inputTransportFactory,
                      const boost::shared_ptr<TTransportFactory>& outputTransportFactory,
                      const boost::shared_ptr<TProtocolFactory>& inputProtocolFactory,
                      const boost::shared_ptr<TProtocolFactory>& outputProtocolFactory,
                      int port,
                      const boost::shared_ptr<ThreadManager>& threadManager
-                     = boost::shared_ptr<ThreadManager>(),
-                     THRIFT_OVERLOAD_IF(ProcessorFactory, TProcessorFactory))
+                     = boost::shared_ptr<ThreadManager>())
     : TServer(processorFactory) {
 
     init(port);
@@ -370,16 +364,14 @@ public:
     setThreadManager(threadManager);
   }
 
-  template <typename Processor>
-  TNonblockingServer(const boost::shared_ptr<Processor>& processor,
+  TNonblockingServer(const boost::shared_ptr<TProcessor>& processor,
                      const boost::shared_ptr<TTransportFactory>& inputTransportFactory,
                      const boost::shared_ptr<TTransportFactory>& outputTransportFactory,
                      const boost::shared_ptr<TProtocolFactory>& inputProtocolFactory,
                      const boost::shared_ptr<TProtocolFactory>& outputProtocolFactory,
                      int port,
                      const boost::shared_ptr<ThreadManager>& threadManager
-                     = boost::shared_ptr<ThreadManager>(),
-                     THRIFT_OVERLOAD_IF(Processor, TProcessor))
+                     = boost::shared_ptr<ThreadManager>())
     : TServer(processor) {
 
     init(port);
@@ -395,6 +387,8 @@ public:
 
   void setThreadManager(boost::shared_ptr<ThreadManager> threadManager);
 
+  int getListenPort() { return listenPort_; }
+
   boost::shared_ptr<ThreadManager> getThreadManager() { return threadManager_; }
 
   /**
@@ -403,7 +397,11 @@ public:
    * PosixThreadFactory for the IO worker threads, because they must joinable
    * for clean shutdown.
    */
-  void setNumIOThreads(size_t numThreads) { numIOThreads_ = numThreads; }
+  void setNumIOThreads(size_t numThreads) {
+    numIOThreads_ = numThreads;
+    // User-provided event-base doesn't works for multi-threaded servers
+    assert(numIOThreads_ <= 1 || !userEventBase_);
+  }
 
   /** Return whether the IO threads will get high scheduling priority */
   bool useHighPriorityIOThreads() const { return useHighPriorityIOThreads_; }
@@ -669,7 +667,7 @@ public:
 
   /**
    * Check buffer sizes every "count" calls.  This allows buffer limits
-   * to be enforced for persistant connections with a controllable degree
+   * to be enforced for persistent connections with a controllable degree
    * of overhead. 0 disables checks except at connection close.
    *
    * @param count the number of calls between checks, or 0 to disable
@@ -812,7 +810,7 @@ private:
    * C-callable event handler for listener events.  Provides a callback
    * that libevent can understand which invokes server->handleEvent().
    *
-   * @param fd the descriptor the event occured on.
+   * @param fd the descriptor the event occurred on.
    * @param which the flags associated with the event.
    * @param v void* callback arg where we placed TNonblockingServer's "this".
    */

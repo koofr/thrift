@@ -271,13 +271,13 @@ public:
             if (task->state_ == ThreadManager::Task::WAITING) {
               task->state_ = ThreadManager::Task::EXECUTING;
             }
+          }
 
-            /* If we have a pending task max and we just dropped below it, wakeup any
-               thread that might be blocked on add. */
-            if (manager_->pendingTaskCountMax_ != 0
-                && manager_->tasks_.size() <= manager_->pendingTaskCountMax_ - 1) {
+          /* If we have a pending task max and we just dropped below it, wakeup any
+             thread that might be blocked on add. */
+          if (manager_->pendingTaskCountMax_ != 0
+                  && manager_->tasks_.size() <= manager_->pendingTaskCountMax_ - 1) {
               manager_->maxMonitor_.notify();
-            }
           }
         } else {
           idle_ = true;
@@ -290,8 +290,10 @@ public:
         if (task->state_ == ThreadManager::Task::EXECUTING) {
           try {
             task->run();
+          } catch (const std::exception& e) {
+            GlobalOutput.printf("[ERROR] task->run() raised an exception: %s", e.what());
           } catch (...) {
-            // XXX need to log this
+            GlobalOutput.printf("[ERROR] task->run() raised an unknown exception");
           }
         }
       }
@@ -330,7 +332,7 @@ void ThreadManager::Impl::addWorker(size_t value) {
   }
 
   for (std::set<shared_ptr<Thread> >::iterator ix = newThreads.begin(); ix != newThreads.end();
-       ix++) {
+       ++ix) {
     shared_ptr<ThreadManager::Worker> worker
         = dynamic_pointer_cast<ThreadManager::Worker, Runnable>((*ix)->runnable());
     worker->state_ = ThreadManager::Worker::STARTING;
@@ -425,7 +427,7 @@ void ThreadManager::Impl::removeWorker(size_t value) {
 
     for (std::set<shared_ptr<Thread> >::iterator ix = deadWorkers_.begin();
          ix != deadWorkers_.end();
-         ix++) {
+         ++ix) {
       idMap_.erase((*ix)->getId());
       workers_.erase(*ix);
     }
